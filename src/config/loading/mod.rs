@@ -1,5 +1,3 @@
-#![warn(clippy::pedantic)]
-
 mod config_builder;
 pub(crate) mod interpolation;
 mod loader;
@@ -7,6 +5,9 @@ mod representation;
 pub mod schema_coercion;
 mod secret;
 mod source;
+
+#[cfg(test)]
+mod tests;
 
 use std::{
     collections::HashMap,
