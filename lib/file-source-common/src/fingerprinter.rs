@@ -11,8 +11,8 @@ use tokio::{
     fs::{self, File},
     io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncSeekExt, BufReader},
 };
-use vector_common::compression::gzip_multiple_decoder;
-use vector_common::constants::GZIP_MAGIC;
+use vector_common::compression::{gzip_multiple_decoder, zstd_multiple_decoder};
+use vector_common::constants::{GZIP_MAGIC, ZSTD_MAGIC};
 
 use crate::{
     AsyncFileInfo, internal_events::FileSourceInternalEvents, metadata_ext::PortableFileExt,
@@ -63,17 +63,19 @@ pub enum FileFingerprint {
 #[derive(Debug, Copy, Clone)]
 enum SupportedCompressionAlgorithms {
     Gzip,
+    Zstd,
 }
 
 impl SupportedCompressionAlgorithms {
     fn values() -> Vec<SupportedCompressionAlgorithms> {
         // Enumerate these from smallest magic_header_bytes to largest
-        vec![SupportedCompressionAlgorithms::Gzip]
+        vec![SupportedCompressionAlgorithms::Gzip, SupportedCompressionAlgorithms::Zstd]
     }
 
     fn magic_header_bytes(self) -> &'static [u8] {
         match self {
             SupportedCompressionAlgorithms::Gzip => GZIP_MAGIC,
+            SupportedCompressionAlgorithms::Zstd => ZSTD_MAGIC,
         }
     }
 }
@@ -129,6 +131,9 @@ impl UncompressedReader for UncompressedReaderImpl {
         match Self::check(fp).await? {
             Some(SupportedCompressionAlgorithms::Gzip) => Ok(Box::new(BufReader::new(
                 gzip_multiple_decoder(BufReader::new(fp)),
+            ))),
+            Some(SupportedCompressionAlgorithms::Zstd) => Ok(Box::new(BufReader::new(
+                zstd_multiple_decoder(BufReader::new(fp)),
             ))),
             // No compression, or read the raw bytes
             None => Ok(Box::new(BufReader::new(fp))),
@@ -285,7 +290,7 @@ async fn fingerprinter_read_until(
 mod test {
     use std::{collections::HashMap, fs, io::Error, path::Path, time::Duration};
 
-    use async_compression::tokio::bufread::GzipEncoder;
+    use async_compression::tokio::bufread::{GzipEncoder, ZstdEncoder};
     use bytes::BytesMut;
     use tempfile::{TempDir, tempdir};
 
@@ -300,6 +305,12 @@ mod test {
         encoder.read_to_end(&mut out).await.expect("Failed to read");
         out
     }
+    pub async fn zstd(data: &[u8]) -> Vec<u8> {
+        let mut encoder = ZstdEncoder::new(data);
+        let mut out = Vec::new();
+        encoder.read_to_end(&mut out).await.expect("Failed to read");
+        out
+    }                           // TODO: finish test
     fn read_byte_content(target_dir: &TempDir, file: &str) -> Vec<u8> {
         use std::{fs::File, io::Read};
 
