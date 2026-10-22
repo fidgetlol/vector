@@ -305,16 +305,15 @@ impl FileWatcher {
                 let old_info = self.get_unwatch_info().await;
 
                 let mut reader = BufReader::new(new_file);
-                let gzipped = is_gzipped(&mut reader).await?;
-                let new_reader = if gzipped {
-                    if self.file_position != 0 {
-                        FileReader::Null(io::Cursor::new(Vec::new()))
-                    } else {
-                        FileReader::Gzipped(Box::new(BufReader::new(gzip_multiple_decoder(reader))))
+                let compressed = is_compressed(&mut reader).await?;
+                let new_reader: FileReader = match compressed {
+                    Some(_) if self.file_position != 0 => FileReader::Null(io::Cursor::new(Vec::new())),
+                    Some(Compression::Gzip) => FileReader::Gzipped(Box::new(BufReader::new(gzip_multiple_decoder(reader)))),
+                    Some(Compression::Zstd) => FileReader::Zstd(Box::new(BufReader::new(zstd_multiple_decoder(reader)))),
+                    None => {
+                        reader.seek(io::SeekFrom::Start(self.file_position)).await?;
+                        FileReader::Plain(reader)
                     }
-                } else {
-                    reader.seek(io::SeekFrom::Start(self.file_position)).await?;
-                    FileReader::Plain(reader)
                 };
                 self.reader = new_reader;
 
@@ -504,15 +503,10 @@ impl FileWatcher {
     }
 }
 
-async fn is_gzipped<R: AsyncRead + Unpin>(r: &mut BufReader<R>) -> io::Result<bool> {
-    let header_bytes = r.fill_buf().await?;
-    // WARN: The paired `BufReader::consume` is not called intentionally. If we
-    // do we'll chop a decent part of the potential gzip stream off.
-    Ok(header_bytes.starts_with(GZIP_MAGIC))
-}
-
 async fn is_compressed<R: AsyncRead + Unpin>(r: &mut BufReader<R>) -> io::Result<Option<Compression>> {
     let header_bytes = r.fill_buf().await?;
+    // WARN: The paired `BufReader::consume` is intentionally not called. If we
+    // do we'll chop a decent part of the compressed stream off.
     Ok(if header_bytes.starts_with(ZSTD_MAGIC) {
         Some(Compression::Zstd)
     } else if header_bytes.starts_with(GZIP_MAGIC) {

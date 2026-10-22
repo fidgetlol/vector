@@ -290,7 +290,7 @@ async fn fingerprinter_read_until(
 mod test {
     use std::{collections::HashMap, fs, io::Error, path::Path, time::Duration};
 
-    use async_compression::tokio::bufread::{GzipEncoder, ZstdEncoder};
+    use async_compression::tokio::bufread::GzipEncoder;
     use bytes::BytesMut;
     use tempfile::{TempDir, tempdir};
 
@@ -305,12 +305,6 @@ mod test {
         encoder.read_to_end(&mut out).await.expect("Failed to read");
         out
     }
-    pub async fn zstd(data: &[u8]) -> Vec<u8> {
-        let mut encoder = ZstdEncoder::new(data);
-        let mut out = Vec::new();
-        encoder.read_to_end(&mut out).await.expect("Failed to read");
-        out
-    }                           // TODO: finish test
     fn read_byte_content(target_dir: &TempDir, file: &str) -> Vec<u8> {
         use std::{fs::File, io::Read};
 
