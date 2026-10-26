@@ -69,7 +69,10 @@ enum SupportedCompressionAlgorithms {
 impl SupportedCompressionAlgorithms {
     fn values() -> Vec<SupportedCompressionAlgorithms> {
         // Enumerate these from smallest magic_header_bytes to largest
-        vec![SupportedCompressionAlgorithms::Gzip, SupportedCompressionAlgorithms::Zstd]
+        vec![
+            SupportedCompressionAlgorithms::Gzip,
+            SupportedCompressionAlgorithms::Zstd,
+        ]
     }
 
     fn magic_header_bytes(self) -> &'static [u8] {
